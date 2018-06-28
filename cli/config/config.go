@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/docker/cli/cli/config/configfile"
-	"github.com/docker/cli/cli/config/credentials"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/pkg/homedir"
 	"github.com/pkg/errors"
@@ -112,9 +111,6 @@ func LoadDefaultConfigFile(stderr io.Writer) *configfile.ConfigFile {
 	configFile, err := Load(Dir())
 	if err != nil {
 		fmt.Fprintf(stderr, "WARNING: Error loading config file: %v\n", err)
-	}
-	if !configFile.ContainsAuth() {
-		configFile.CredentialsStore = credentials.DetectDefaultStore(configFile.CredentialsStore)
 	}
 	return configFile
 }

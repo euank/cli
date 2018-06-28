@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/docker/cli/cli/config/credentials"
 	"github.com/docker/cli/opts"
@@ -25,29 +26,33 @@ const (
 
 // ConfigFile ~/.docker/config.json file info
 type ConfigFile struct {
-	AuthConfigs          map[string]types.AuthConfig `json:"auths"`
-	HTTPHeaders          map[string]string           `json:"HttpHeaders,omitempty"`
-	PsFormat             string                      `json:"psFormat,omitempty"`
-	ImagesFormat         string                      `json:"imagesFormat,omitempty"`
-	NetworksFormat       string                      `json:"networksFormat,omitempty"`
-	PluginsFormat        string                      `json:"pluginsFormat,omitempty"`
-	VolumesFormat        string                      `json:"volumesFormat,omitempty"`
-	StatsFormat          string                      `json:"statsFormat,omitempty"`
-	DetachKeys           string                      `json:"detachKeys,omitempty"`
-	CredentialsStore     string                      `json:"credsStore,omitempty"`
-	CredentialHelpers    map[string]string           `json:"credHelpers,omitempty"`
-	Filename             string                      `json:"-"` // Note: for internal use only
-	ServiceInspectFormat string                      `json:"serviceInspectFormat,omitempty"`
-	ServicesFormat       string                      `json:"servicesFormat,omitempty"`
-	TasksFormat          string                      `json:"tasksFormat,omitempty"`
-	SecretFormat         string                      `json:"secretFormat,omitempty"`
-	ConfigFormat         string                      `json:"configFormat,omitempty"`
-	NodesFormat          string                      `json:"nodesFormat,omitempty"`
-	PruneFilters         []string                    `json:"pruneFilters,omitempty"`
-	Proxies              map[string]ProxyConfig      `json:"proxies,omitempty"`
-	Experimental         string                      `json:"experimental,omitempty"`
-	StackOrchestrator    string                      `json:"stackOrchestrator,omitempty"`
-	Kubernetes           *KubernetesConfig           `json:"kubernetes,omitempty"`
+	AuthConfigs    map[string]types.AuthConfig `json:"auths"`
+	HTTPHeaders    map[string]string           `json:"HttpHeaders,omitempty"`
+	PsFormat       string                      `json:"psFormat,omitempty"`
+	ImagesFormat   string                      `json:"imagesFormat,omitempty"`
+	NetworksFormat string                      `json:"networksFormat,omitempty"`
+	PluginsFormat  string                      `json:"pluginsFormat,omitempty"`
+	VolumesFormat  string                      `json:"volumesFormat,omitempty"`
+	StatsFormat    string                      `json:"statsFormat,omitempty"`
+	DetachKeys     string                      `json:"detachKeys,omitempty"`
+	// initializeCredentialsStoreOnce ensures 'CredentialStore' is set to its
+	// default value the first time 'GetCredentialsStore' is called, if it was
+	// not explicitly set.
+	initializeCredentialsStoreOnce sync.Once
+	CredentialsStore               string                 `json:"credsStore,omitempty"`
+	CredentialHelpers              map[string]string      `json:"credHelpers,omitempty"`
+	Filename                       string                 `json:"-"` // Note: for internal use only
+	ServiceInspectFormat           string                 `json:"serviceInspectFormat,omitempty"`
+	ServicesFormat                 string                 `json:"servicesFormat,omitempty"`
+	TasksFormat                    string                 `json:"tasksFormat,omitempty"`
+	SecretFormat                   string                 `json:"secretFormat,omitempty"`
+	ConfigFormat                   string                 `json:"configFormat,omitempty"`
+	NodesFormat                    string                 `json:"nodesFormat,omitempty"`
+	PruneFilters                   []string               `json:"pruneFilters,omitempty"`
+	Proxies                        map[string]ProxyConfig `json:"proxies,omitempty"`
+	Experimental                   string                 `json:"experimental,omitempty"`
+	StackOrchestrator              string                 `json:"stackOrchestrator,omitempty"`
+	Kubernetes                     *KubernetesConfig      `json:"kubernetes,omitempty"`
 }
 
 // ProxyConfig contains proxy configuration settings
@@ -259,6 +264,11 @@ func decodeAuth(authStr string) (string, string, error) {
 // GetCredentialsStore returns a new credentials store from the settings in the
 // configuration file
 func (configFile *ConfigFile) GetCredentialsStore(registryHostname string) credentials.Store {
+	configFile.initializeCredentialsStoreOnce.Do(func() {
+		if !configFile.ContainsAuth() {
+			configFile.CredentialsStore = credentials.DetectDefaultStore(configFile.CredentialsStore)
+		}
+	})
 	if helper := getConfiguredCredentialStore(configFile, registryHostname); helper != "" {
 		return newNativeStore(configFile, helper)
 	}
